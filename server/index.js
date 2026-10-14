@@ -51,10 +51,16 @@ app.post("/api/tasks", async (req, res) => {
   const { title } = req.body ?? {};
 
   if (!title || typeof title !== "string" || !title.trim()) {
-    return res.status(400).json({
-      message: "Task title is required",
-    });
-  }
+  return res.status(400).json({
+    message: "Task title is required",
+  });
+}
+
+if (title.trim().length > 255) {
+  return res.status(400).json({
+    message: "Task title must be 255 characters or fewer",
+  });
+}
 
   try {
     const [result] = await pool.execute(
@@ -75,6 +81,79 @@ app.post("/api/tasks", async (req, res) => {
     });
   }
 });
+
+
+ // Mark a task as completed or pending
+app.patch("/api/tasks/:id", async (req, res) => {
+  const { id } = req.params;
+  const { completed } = req.body;
+
+  if (typeof completed !== "boolean") {
+    return res.status(400).json({
+      message: "completed must be true or false",
+    });
+  }
+
+  try {
+    const [result] = await pool.execute(
+      "UPDATE tasks SET completed = ? WHERE id = ?",
+      [completed, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+
+    const [rows] = await pool.execute(
+      "SELECT * FROM tasks WHERE id = ?",
+      [id]
+    );
+
+    res.json(rows[0]);
+  } catch (error) {
+    console.error("Failed to update task:", error.message);
+    res.status(500).json({ message: "Failed to update task" });
+  }
+});
+
+// Delete a task
+app.delete("/api/tasks/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const [result] = await pool.execute(
+      "DELETE FROM tasks WHERE id = ?",
+      [id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+
+    res.json({ message: "Task deleted successfully" });
+  } catch (error) {
+    console.error("Failed to delete task:", error.message);
+    res.status(500).json({ message: "Failed to delete task" });
+  }
+});
+
+
+app.get("/api/tasks/completed", async (req, res) => {
+  try {
+    const [tasks] = await pool.query(
+      "SELECT * FROM tasks WHERE completed = TRUE ORDER BY id DESC"
+    );
+
+    res.json(tasks);
+  } catch (error) {
+    console.error("Failed to fetch completed tasks:", error.message);
+
+    res.status(500).json({
+      message: "Failed to fetch completed tasks",
+    });
+  }
+});
+
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
